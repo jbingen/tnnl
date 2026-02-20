@@ -1,0 +1,37 @@
+app = "tnnl-server"
+primary_region = "iad"
+
+[build]
+
+[env]
+  DOMAIN = "tnnl.run"
+
+# HTTP traffic: Fly terminates TLS, forwards plain HTTP to tnnl
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_stop_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+# Control port: raw TCP passthrough — tnnl's custom multiplexed protocol
+[[services]]
+  internal_port = 9443
+  protocol = "tcp"
+  auto_stop_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 9443
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
