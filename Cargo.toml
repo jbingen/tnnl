@@ -1,0 +1,26 @@
+[package]
+name = "tnnl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+yamux = "0.13"
+tokio-util = { version = "0.7", features = ["compat"] }
+futures = "0.3"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dashmap = "6"
+rand = "0.9"
+anyhow = "1"
+base64 = "0.22"
+console = "0.15"
+toml = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
