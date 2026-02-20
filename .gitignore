@@ -1,3 +1,4 @@
 /target
 demo.tape
 demo-setup.sh
+fly.toml
