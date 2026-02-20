@@ -87,6 +87,29 @@ pub fn is_chunked(headers: &[u8]) -> bool {
     false
 }
 
+/// Rewrite the Host header to point at the local server.
+/// Without this, dev servers like Next.js see the tunnel URL as a foreign
+/// origin and may reject or misbehave on certain requests.
+pub fn rewrite_host(headers: &[u8], local_host: &str, local_port: u16) -> Vec<u8> {
+    let text = match std::str::from_utf8(headers) {
+        Ok(s) => s,
+        Err(_) => return headers.to_vec(),
+    };
+    let new_host_line = format!("Host: {local_host}:{local_port}\r\n");
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive("\r\n") {
+        let bare = line.trim_end_matches("\r\n");
+        if let Some(colon) = bare.find(':')
+            && bare[..colon].trim().eq_ignore_ascii_case("host")
+        {
+            out.push_str(&new_host_line);
+        } else {
+            out.push_str(line);
+        }
+    }
+    out.into_bytes()
+}
+
 /// Index of the first byte after the header block (i.e. after \r\n\r\n).
 pub fn headers_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
@@ -133,6 +156,23 @@ pub fn parse_request_line(buf: &[u8]) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rewrite_host_replaces_tunnel_host() {
+        let headers = b"GET / HTTP/1.1\r\nHost: p.tnnl.run\r\nAccept: */*\r\n\r\n";
+        let out = rewrite_host(headers, "localhost", 3000);
+        assert_eq!(
+            out,
+            b"GET / HTTP/1.1\r\nHost: localhost:3000\r\nAccept: */*\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn rewrite_host_case_insensitive() {
+        let headers = b"GET / HTTP/1.1\r\nHOST: p.tnnl.run\r\n\r\n";
+        let out = rewrite_host(headers, "localhost", 3000);
+        assert_eq!(out, b"GET / HTTP/1.1\r\nHost: localhost:3000\r\n\r\n");
+    }
 
     #[test]
     fn extract_host_basic() {

@@ -1,6 +1,6 @@
 [package]
 name = "tnnl-cli"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 description = "Expose localhost to the internet. Self-hosted ngrok alternative."
 license = "MIT"

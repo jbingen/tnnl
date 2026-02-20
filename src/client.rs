@@ -231,7 +231,9 @@ async fn proxy_to_local(
     if inspect {
         let req_body = read_body_exact(&mut tunnel, body_prefix, content_length).await;
 
-        local.write_all(req_headers).await?;
+        local
+            .write_all(&proxy::rewrite_host(req_headers, local_host, local_port))
+            .await?;
         local.write_all(&req_body).await?;
         local.flush().await?;
 
@@ -296,7 +298,9 @@ async fn proxy_to_local(
         let resp_body_str = body_for_display(&out_headers, &resp_body);
         tlog::inspect_response(status, &resp_raw, &resp_body_str, id);
     } else {
-        local.write_all(req_headers).await?;
+        local
+            .write_all(&proxy::rewrite_host(req_headers, local_host, local_port))
+            .await?;
         local.write_all(&body_prefix).await?;
         local.flush().await?;
 
