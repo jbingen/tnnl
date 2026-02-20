@@ -1,4 +1,4 @@
-use console::{style, Style, Term};
+use console::{Style, Term, style};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -46,10 +46,10 @@ fn status_text(status: u16) -> &'static str {
 
 fn extract_content_type(headers: &str) -> &str {
     for line in headers.lines() {
-        if let Some(colon) = line.find(':') {
-            if line[..colon].eq_ignore_ascii_case("content-type") {
-                return line[colon + 1..].trim();
-            }
+        if let Some(colon) = line.find(':')
+            && line[..colon].eq_ignore_ascii_case("content-type")
+        {
+            return line[colon + 1..].trim();
         }
     }
     ""
@@ -63,7 +63,11 @@ fn find_key_colon(s: &str) -> Option<usize> {
             i += 2;
         } else if b[i] == b'"' {
             i += 1;
-            return if b.get(i) == Some(&b':') { Some(i) } else { None };
+            return if b.get(i) == Some(&b':') {
+                Some(i)
+            } else {
+                None
+            };
         } else {
             i += 1;
         }
@@ -91,19 +95,19 @@ fn colorize_json_line(line: &str) -> String {
         return format!("{indent}{}", style(trimmed).dim());
     }
 
-    if trimmed.starts_with('"') {
-        if let Some(colon_pos) = find_key_colon(trimmed) {
-            let key_part = &trimmed[..colon_pos];
-            let after = trimmed[colon_pos + 1..].trim_start();
-            let (value_part, comma) = after
-                .strip_suffix(',')
-                .map(|v| (v, ","))
-                .unwrap_or((after, ""));
+    if trimmed.starts_with('"')
+        && let Some(colon_pos) = find_key_colon(trimmed)
+    {
+        let key_part = &trimmed[..colon_pos];
+        let after = trimmed[colon_pos + 1..].trim_start();
+        let (value_part, comma) = after
+            .strip_suffix(',')
+            .map(|v| (v, ","))
+            .unwrap_or((after, ""));
 
-            let key_col = style(key_part).dim();
-            let val_col = colorize_value(value_part);
-            return format!("{indent}{key_col}: {val_col}{comma}");
-        }
+        let key_col = style(key_part).dim();
+        let val_col = colorize_value(value_part);
+        return format!("{indent}{key_col}: {val_col}{comma}");
     }
 
     let (value_part, comma) = trimmed
@@ -147,7 +151,10 @@ fn format_body(raw_headers: &str, body: &str, id: u64) -> String {
         let remaining = lines.len() - BODY_PREVIEW_LINES;
         format!(
             "{shown}\n     {}",
-            style(format!("… {remaining} more lines  (tnnl replay #{id} to see full)")).dim()
+            style(format!(
+                "… {remaining} more lines  (tnnl replay #{id} to see full)"
+            ))
+            .dim()
         )
     } else {
         formatted
@@ -251,7 +258,11 @@ pub fn inspect_request(id: u64, raw_headers: &str, body: &str) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            let _ = err.write_line(&format!("     {} {}", style(format!("{name}:")).dim(), value));
+            let _ = err.write_line(&format!(
+                "     {} {}",
+                style(format!("{name}:")).dim(),
+                value
+            ));
         }
     }
 
@@ -287,7 +298,11 @@ pub fn inspect_response(status: u16, raw_headers: &str, body: &str, id: u64) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            let _ = err.write_line(&format!("     {} {}", style(format!("{name}:")).dim(), value));
+            let _ = err.write_line(&format!(
+                "     {} {}",
+                style(format!("{name}:")).dim(),
+                value
+            ));
         }
     }
 
@@ -318,5 +333,9 @@ pub fn error(msg: &str) {
 
 pub fn success(msg: &str) {
     let err = Term::stderr();
-    let _ = err.write_line(&format!("{}  {}", style(elapsed()).dim(), style(msg).green()));
+    let _ = err.write_line(&format!(
+        "{}  {}",
+        style(elapsed()).dim(),
+        style(msg).green()
+    ));
 }

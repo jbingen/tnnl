@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use futures::AsyncReadExt;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -40,8 +40,8 @@ impl ControlMsg {
 /// HMAC-SHA256(secret, nonce), base64-encoded.
 pub fn compute_hmac(secret: &str, nonce: &str) -> String {
     type HmacSha256 = Hmac<Sha256>;
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(nonce.as_bytes());
     B64.encode(mac.finalize().into_bytes())
 }

@@ -6,7 +6,11 @@ const DEFAULT_CONTROL_PORT: u16 = 9443;
 const DEFAULT_HTTP_PORT: u16 = 8080;
 
 #[derive(Parser)]
-#[command(name = "tnnl", version, about = "Expose localhost to the internet. Self-hosted ngrok alternative.")]
+#[command(
+    name = "tnnl",
+    version,
+    about = "Expose localhost to the internet. Self-hosted ngrok alternative."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -99,14 +103,28 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let cfg = config::load();
 
-            let server_addr = server.or(cfg.server).unwrap_or_else(|| "tnnl.run".to_string());
+            let server_addr = server
+                .or(cfg.server)
+                .unwrap_or_else(|| "tnnl.run".to_string());
             let token = token.or(cfg.token).unwrap_or_default();
-            let ctrl_port = control_port.or(cfg.control_port).unwrap_or(DEFAULT_CONTROL_PORT);
+            let ctrl_port = control_port
+                .or(cfg.control_port)
+                .unwrap_or(DEFAULT_CONTROL_PORT);
             let sub = subdomain.or(cfg.subdomain);
             let basic_auth = auth.or(cfg.auth);
             let do_inspect = inspect || cfg.inspect.unwrap_or(false);
 
-            client::run(port, &local_host, &server_addr, ctrl_port, &token, sub.as_deref(), basic_auth.as_deref(), do_inspect).await?;
+            client::run(client::TunnelOpts {
+                local_port: port,
+                local_host: &local_host,
+                server_addr: &server_addr,
+                server_port: ctrl_port,
+                token: &token,
+                subdomain: sub.as_deref(),
+                auth: basic_auth.as_deref(),
+                inspect: do_inspect,
+            })
+            .await?;
         }
         Command::Replay { id } => {
             client::replay(id).await?;

@@ -36,7 +36,12 @@ struct IpState {
 
 type IpTracker = Arc<DashMap<IpAddr, IpState>>;
 
-pub async fn run(control_port: u16, http_port: u16, domain: &str, token: Option<&str>) -> Result<()> {
+pub async fn run(
+    control_port: u16,
+    http_port: u16,
+    domain: &str,
+    token: Option<&str>,
+) -> Result<()> {
     let registry: Registry = Arc::new(DashMap::new());
     let ip_tracker: IpTracker = Arc::new(DashMap::new());
     let domain = domain.to_string();
@@ -67,7 +72,9 @@ pub async fn run(control_port: u16, http_port: u16, domain: &str, token: Option<
                     let ip = addr.ip();
 
                     if !check_rate_limit(&ipt, ip) {
-                        tlog::info(&format!("rate limited {ip} (>{MAX_CONNECTS_PER_MINUTE}/min)"));
+                        tlog::info(&format!(
+                            "rate limited {ip} (>{MAX_CONNECTS_PER_MINUTE}/min)"
+                        ));
                         drop(socket);
                         continue;
                     }
@@ -78,7 +85,9 @@ pub async fn run(control_port: u16, http_port: u16, domain: &str, token: Option<
                     let tok = tok.clone();
                     let dom = dom.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = handle_client(socket, reg, ipt, ip, tok.as_deref(), &dom).await {
+                        if let Err(e) =
+                            handle_client(socket, reg, ipt, ip, tok.as_deref(), &dom).await
+                        {
                             tlog::error(&format!("client {addr}: {e}"));
                         }
                     });
@@ -124,7 +133,7 @@ fn check_rate_limit(ip_tracker: &IpTracker, ip: IpAddr) -> bool {
         recent_connects: VecDeque::new(),
         active_tunnels: 0,
     });
-    while entry.recent_connects.front().map_or(false, |t| *t < cutoff) {
+    while entry.recent_connects.front().is_some_and(|t| *t < cutoff) {
         entry.recent_connects.pop_front();
     }
     if entry.recent_connects.len() >= MAX_CONNECTS_PER_MINUTE {
@@ -176,14 +185,21 @@ async fn handle_client(
 
     let msg = protocol::read_msg(&mut control_stream).await?;
     let (requested_subdomain, nonce, provided_hmac) = match msg {
-        ControlMsg::Auth { subdomain, nonce, hmac } => (subdomain, nonce, hmac),
+        ControlMsg::Auth {
+            subdomain,
+            nonce,
+            hmac,
+        } => (subdomain, nonce, hmac),
         _ => anyhow::bail!("expected Auth message"),
     };
 
     if let Some(secret) = expected_token {
         let expected_hmac = protocol::compute_hmac(secret, &nonce);
         if provided_hmac.as_deref() != Some(expected_hmac.as_str()) {
-            let encoded = ControlMsg::Error { message: "invalid secret".into() }.encode()?;
+            let encoded = ControlMsg::Error {
+                message: "invalid secret".into(),
+            }
+            .encode()?;
             control_stream.write_all(&encoded).await.ok();
             control_stream.close().await.ok();
             anyhow::bail!("invalid secret from {peer_ip}");
@@ -195,14 +211,20 @@ async fn handle_client(
         .map(|s| s.active_tunnels)
         .unwrap_or(0);
     if ip_active >= MAX_TUNNELS_PER_IP {
-        let encoded = ControlMsg::Error { message: format!("max {MAX_TUNNELS_PER_IP} tunnels per IP") }.encode()?;
+        let encoded = ControlMsg::Error {
+            message: format!("max {MAX_TUNNELS_PER_IP} tunnels per IP"),
+        }
+        .encode()?;
         control_stream.write_all(&encoded).await.ok();
         control_stream.close().await.ok();
         anyhow::bail!("{peer_ip} hit per-IP tunnel limit");
     }
 
     if registry.len() >= MAX_TUNNELS_TOTAL {
-        let encoded = ControlMsg::Error { message: "server at capacity, try again later".into() }.encode()?;
+        let encoded = ControlMsg::Error {
+            message: "server at capacity, try again later".into(),
+        }
+        .encode()?;
         control_stream.write_all(&encoded).await.ok();
         control_stream.close().await.ok();
         anyhow::bail!("global tunnel limit reached");
@@ -219,7 +241,10 @@ async fn handle_client(
         });
 
     if registry.contains_key(&subdomain) {
-        let encoded = ControlMsg::Error { message: format!("subdomain '{subdomain}' already in use") }.encode()?;
+        let encoded = ControlMsg::Error {
+            message: format!("subdomain '{subdomain}' already in use"),
+        }
+        .encode()?;
         control_stream.write_all(&encoded).await.ok();
         control_stream.close().await.ok();
         anyhow::bail!("subdomain collision: {subdomain}");
@@ -234,9 +259,14 @@ async fn handle_client(
     control_stream.flush().await?;
 
     registry.insert(subdomain.clone(), ClientHandle { stream_tx });
-    ip_tracker.entry(peer_ip).and_modify(|s| s.active_tunnels += 1);
+    ip_tracker
+        .entry(peer_ip)
+        .and_modify(|s| s.active_tunnels += 1);
 
-    tlog::success(&format!("tunnel live: {full_domain} (ip={peer_ip}, active={}/{MAX_TUNNELS_PER_IP})", ip_active + 1));
+    tlog::success(&format!(
+        "tunnel live: {full_domain} (ip={peer_ip}, active={}/{MAX_TUNNELS_PER_IP})",
+        ip_active + 1
+    ));
 
     let mut buf = [0u8; 1024];
     loop {
@@ -281,7 +311,9 @@ async fn handle_http(
         } else {
             b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://github.com/jbingen/tnnl\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
         };
-        tokio::io::AsyncWriteExt::write_all(&mut socket, &response).await.ok();
+        tokio::io::AsyncWriteExt::write_all(&mut socket, &response)
+            .await
+            .ok();
         return Ok(());
     }
 

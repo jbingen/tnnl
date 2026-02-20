@@ -19,11 +19,7 @@ fn store_path() -> std::path::PathBuf {
 }
 
 pub fn init() {
-    let max = read_all()
-        .into_iter()
-        .map(|r| r.id)
-        .max()
-        .unwrap_or(0);
+    let max = read_all().into_iter().map(|r| r.id).max().unwrap_or(0);
     NEXT_ID.store(max + 1, Ordering::Relaxed);
 }
 

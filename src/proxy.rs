@@ -1,6 +1,5 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
 
 const MAX_HEADER_SIZE: usize = 8192;
 
@@ -79,10 +78,10 @@ pub async fn write_404<W: AsyncWrite + Unpin>(stream: &mut W) -> Result<()> {
 pub fn is_chunked(headers: &[u8]) -> bool {
     let text = std::str::from_utf8(headers).unwrap_or("");
     for line in text.split("\r\n") {
-        if let Some(colon) = line.find(':') {
-            if line[..colon].eq_ignore_ascii_case("transfer-encoding") {
-                return line[colon + 1..].trim().eq_ignore_ascii_case("chunked");
-            }
+        if let Some(colon) = line.find(':')
+            && line[..colon].eq_ignore_ascii_case("transfer-encoding")
+        {
+            return line[colon + 1..].trim().eq_ignore_ascii_case("chunked");
         }
     }
     false
@@ -96,10 +95,10 @@ pub fn headers_end(buf: &[u8]) -> Option<usize> {
 pub fn parse_content_length(buf: &[u8]) -> usize {
     let text = std::str::from_utf8(buf).unwrap_or("");
     for line in text.split("\r\n") {
-        if let Some(colon) = line.find(':') {
-            if line[..colon].eq_ignore_ascii_case("content-length") {
-                return line[colon + 1..].trim().parse().unwrap_or(0);
-            }
+        if let Some(colon) = line.find(':')
+            && line[..colon].eq_ignore_ascii_case("content-length")
+        {
+            return line[colon + 1..].trim().parse().unwrap_or(0);
         }
     }
     0

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use futures::future::poll_fn;
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use futures::AsyncWriteExt;
+use futures::future::poll_fn;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpStream;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -16,28 +16,32 @@ use crate::store;
 
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
-const BODY_CAP: usize = 10 * 1024 * 1024; // 10 MB inspect cap
+const BODY_CAP: usize = 10 * 1024 * 1024;
 
-pub async fn run(
-    local_port: u16,
-    local_host: &str,
-    server_addr: &str,
-    server_port: u16,
-    token: &str,
-    subdomain: Option<&str>,
-    auth: Option<&str>,
-    inspect: bool,
-) -> Result<()> {
+pub struct TunnelOpts<'a> {
+    pub local_port: u16,
+    pub local_host: &'a str,
+    pub server_addr: &'a str,
+    pub server_port: u16,
+    pub token: &'a str,
+    pub subdomain: Option<&'a str>,
+    pub auth: Option<&'a str>,
+    pub inspect: bool,
+}
+
+pub async fn run(opts: TunnelOpts<'_>) -> Result<()> {
     store::init();
-    let expected_auth = auth.map(|a| format!("Basic {}", B64.encode(a)));
+    let expected_auth = opts.auth.map(|a| format!("Basic {}", B64.encode(a)));
     let mut backoff = INITIAL_BACKOFF;
 
     loop {
-        tlog::info(&format!("connecting to {server_addr}:{server_port}..."));
+        tlog::info(&format!(
+            "connecting to {}:{}...",
+            opts.server_addr, opts.server_port
+        ));
 
         let attempt_start = std::time::Instant::now();
-        match connect_and_tunnel(local_port, local_host, server_addr, server_port, token, subdomain, expected_auth.as_deref(), inspect).await
-        {
+        match connect_and_tunnel(&opts, expected_auth.as_deref()).await {
             Ok(()) => {
                 tlog::info("connection closed");
                 break;
@@ -59,16 +63,17 @@ pub async fn run(
     Ok(())
 }
 
-async fn connect_and_tunnel(
-    local_port: u16,
-    local_host: &str,
-    server_addr: &str,
-    server_port: u16,
-    token: &str,
-    subdomain: Option<&str>,
-    expected_auth: Option<&str>,
-    inspect: bool,
-) -> Result<()> {
+async fn connect_and_tunnel(opts: &TunnelOpts<'_>, expected_auth: Option<&str>) -> Result<()> {
+    let TunnelOpts {
+        local_port,
+        local_host,
+        server_addr,
+        server_port,
+        token,
+        subdomain,
+        inspect,
+        ..
+    } = opts;
     let socket = tokio::time::timeout(
         Duration::from_secs(10),
         TcpStream::connect(format!("{server_addr}:{server_port}")),
@@ -129,12 +134,12 @@ async fn connect_and_tunnel(
         _ => anyhow::bail!("unexpected response from server"),
     };
 
-    let display_url = if server_addr == "127.0.0.1" || server_addr == "localhost" {
+    let display_url = if *server_addr == "127.0.0.1" || *server_addr == "localhost" {
         format!("http://{tunnel_url}")
     } else {
         format!("https://{tunnel_url}")
     };
-    tlog::banner(&display_url, local_host, local_port, inspect);
+    tlog::banner(&display_url, local_host, *local_port, *inspect);
 
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(async move {
@@ -153,7 +158,7 @@ async fn connect_and_tunnel(
             }
             stream = inbound_rx.recv() => {
                 match stream {
-                    Some(s) => { tokio::spawn(handle_stream(s, local_port, local_host.to_string(), expected_auth.map(|s| s.to_string()), inspect)); }
+                    Some(s) => { tokio::spawn(handle_stream(s, *local_port, local_host.to_string(), expected_auth.map(|s| s.to_string()), *inspect)); }
                     None => break,
                 }
             }
@@ -163,8 +168,22 @@ async fn connect_and_tunnel(
     Ok(())
 }
 
-async fn handle_stream(stream: yamux::Stream, local_port: u16, local_host: String, expected_auth: Option<String>, inspect: bool) {
-    if let Err(e) = proxy_to_local(stream, local_port, &local_host, expected_auth.as_deref(), inspect).await {
+async fn handle_stream(
+    stream: yamux::Stream,
+    local_port: u16,
+    local_host: String,
+    expected_auth: Option<String>,
+    inspect: bool,
+) {
+    if let Err(e) = proxy_to_local(
+        stream,
+        local_port,
+        &local_host,
+        expected_auth.as_deref(),
+        inspect,
+    )
+    .await
+    {
         tlog::error(&format!("proxy: {e}"));
     }
 }
@@ -277,8 +296,16 @@ async fn proxy_to_local(
         let n = local.read(&mut peek).await.unwrap_or(0);
         let status = proxy::parse_response_status(&peek[..n]);
         tunnel.write_all(&peek[..n]).await?;
-        tokio::io::copy_bidirectional(&mut local, &mut tunnel).await.ok();
-        tlog::request(&method, &path, status, start.elapsed().as_millis() as u64, id);
+        tokio::io::copy_bidirectional(&mut local, &mut tunnel)
+            .await
+            .ok();
+        tlog::request(
+            &method,
+            &path,
+            status,
+            start.elapsed().as_millis() as u64,
+            id,
+        );
     }
 
     Ok(())
@@ -372,8 +399,7 @@ fn rebuild_resp_headers(headers: &[u8], body_len: usize) -> Vec<u8> {
 }
 
 pub async fn replay(id: u64) -> Result<()> {
-    let req = store::find(id)
-        .ok_or_else(|| anyhow::anyhow!("request #{id} not found"))?;
+    let req = store::find(id).ok_or_else(|| anyhow::anyhow!("request #{id} not found"))?;
 
     tlog::info(&format!("replaying #{id}: {} {}", req.method, req.path));
 
