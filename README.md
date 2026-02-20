@@ -196,14 +196,15 @@ See [Self-hosting](#self-hosting) above.
 |                        | tnnl | ngrok   | bore | frp      |
 | ---------------------- | ---- | ------- | ---- | -------- |
 | Self-hosted            | ✓    | ✗       | ✓    | ✓        |
+| No account required    | ✓    | ✗       | ✓    | ✓        |
 | Public shared server   | ✓    | ✓       | ✓    | ✗        |
 | Single binary          | ✓    | ✓       | ✓    | ✗        |
 | HTTP subdomain routing | ✓    | ✓       | ✗    | ✓        |
 | Auth                   | HMAC | HMAC    | HMAC | token    |
 | Config file            | ✓    | ✓       | ✗    | required |
 | Auto-reconnect         | ✓    | ✓       | ✗    | ✓        |
-| Request inspection     | ✓    | paid    | ✗    | ✗        |
-| Replay                 | ✓    | paid    | ✗    | ✗        |
+| Request inspection     | ✓    | ✓       | ✗    | ✗        |
+| Replay                 | ✓    | ✓       | ✗    | ✗        |
 | Tunnel basic auth      | ✓    | paid    | ✗    | ✗        |
 | Free                   | ✓    | limited | ✓    | ✓        |
 
