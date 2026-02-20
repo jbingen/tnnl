@@ -399,8 +399,7 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
 fn is_binary_content_type(headers: &str) -> bool {
     for line in headers.lines() {
         let lower = line.to_ascii_lowercase();
-        if lower.starts_with("content-type:") {
-            let val = &lower[13..];
+        if let Some(val) = lower.strip_prefix("content-type:") {
             return val.contains("image/")
                 || val.contains("audio/")
                 || val.contains("video/")
@@ -424,10 +423,8 @@ fn body_for_display(headers: &[u8], body: &[u8]) -> String {
     let is_gzip = headers_str
         .lines()
         .any(|l| l.to_ascii_lowercase().starts_with("content-encoding:") && l.contains("gzip"));
-    if is_gzip {
-        if let Some(decoded) = decompress_gzip(body) {
-            return String::from_utf8_lossy(&decoded).into_owned();
-        }
+    if is_gzip && let Some(decoded) = decompress_gzip(body) {
+        return String::from_utf8_lossy(&decoded).into_owned();
     }
     String::from_utf8_lossy(body).into_owned()
 }
