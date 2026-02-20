@@ -261,7 +261,11 @@ pub fn inspect_request(id: u64, raw_headers: &str, body: &str) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            out.push_str(&format!("     {} {}\n", style(format!("{name}:")).dim(), value));
+            out.push_str(&format!(
+                "     {} {}\n",
+                style(format!("{name}:")).dim(),
+                value
+            ));
         }
     }
 
@@ -301,7 +305,11 @@ pub fn inspect_response(status: u16, raw_headers: &str, body: &str, id: u64) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            out.push_str(&format!("     {} {}\n", style(format!("{name}:")).dim(), value));
+            out.push_str(&format!(
+                "     {} {}\n",
+                style(format!("{name}:")).dim(),
+                value
+            ));
         }
     }
 

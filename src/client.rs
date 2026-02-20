@@ -253,8 +253,16 @@ async fn proxy_to_local(
         if status == 101 {
             tunnel.write_all(&resp_head).await?;
             tunnel.flush().await.ok();
-            tlog::request(&method, &path, status, start.elapsed().as_millis() as u64, id);
-            tokio::io::copy_bidirectional(&mut local, &mut tunnel).await.ok();
+            tlog::request(
+                &method,
+                &path,
+                status,
+                start.elapsed().as_millis() as u64,
+                id,
+            );
+            tokio::io::copy_bidirectional(&mut local, &mut tunnel)
+                .await
+                .ok();
             return Ok(());
         }
 
