@@ -1,8 +1,11 @@
 use console::{Style, Term, style};
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex, OnceLock};
 use std::time::Instant;
 
 static START: OnceLock<Instant> = OnceLock::new();
+static INSPECT_BUF: LazyLock<Mutex<HashMap<u64, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 const SKIP_RESP_HEADERS: &[&str] = &["server", "date", "connection", "transfer-encoding"];
 const SKIP_REQ_HEADERS: &[&str] = &["accept-encoding", "connection"];
@@ -231,16 +234,16 @@ pub fn request(method: &str, path: &str, status: u16, duration_ms: u64, id: u64)
 }
 
 pub fn inspect_request(id: u64, raw_headers: &str, body: &str) {
-    let err = Term::stderr();
     let mut lines = raw_headers.lines();
     let req_line = lines.next().unwrap_or("");
     let mut parts = req_line.splitn(3, ' ');
     let method = parts.next().unwrap_or("?");
     let path = parts.next().unwrap_or("/");
 
-    let _ = err.write_line("");
-    let _ = err.write_line(&format!(
-        "  {}  {} {}  {}",
+    let mut out = String::new();
+    out.push('\n');
+    out.push_str(&format!(
+        "  {}  {} {}  {}\n",
         style("→").cyan().bold(),
         style(method).bold(),
         style(path).bold(),
@@ -258,30 +261,30 @@ pub fn inspect_request(id: u64, raw_headers: &str, body: &str) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            let _ = err.write_line(&format!(
-                "     {} {}",
-                style(format!("{name}:")).dim(),
-                value
-            ));
+            out.push_str(&format!("     {} {}\n", style(format!("{name}:")).dim(), value));
         }
     }
 
     let formatted = format_body(raw_headers, body, id);
     if !formatted.is_empty() {
-        let _ = err.write_line("");
+        out.push('\n');
         for line in formatted.lines() {
-            let _ = err.write_line(&format!("     {line}"));
+            out.push_str(&format!("     {line}\n"));
         }
+    }
+
+    if let Ok(mut buf) = INSPECT_BUF.lock() {
+        buf.insert(id, out);
     }
 }
 
 pub fn inspect_response(status: u16, raw_headers: &str, body: &str, id: u64) {
     let ss = status_style(status);
-    let err = Term::stderr();
 
-    let _ = err.write_line("");
-    let _ = err.write_line(&format!(
-        "  {}  {} {}",
+    let mut out = String::new();
+    out.push('\n');
+    out.push_str(&format!(
+        "  {}  {} {}\n",
         ss.clone().bold().apply_to("←"),
         ss.clone().bold().apply_to(status),
         style(status_text(status)).dim(),
@@ -298,23 +301,27 @@ pub fn inspect_response(status: u16, raw_headers: &str, body: &str, id: u64) {
                 continue;
             }
             let value = line[colon + 1..].trim();
-            let _ = err.write_line(&format!(
-                "     {} {}",
-                style(format!("{name}:")).dim(),
-                value
-            ));
+            out.push_str(&format!("     {} {}\n", style(format!("{name}:")).dim(), value));
         }
     }
 
     let formatted = format_body(raw_headers, body, id);
     if !formatted.is_empty() {
-        let _ = err.write_line("");
+        out.push('\n');
         for line in formatted.lines() {
-            let _ = err.write_line(&format!("     {line}"));
+            out.push_str(&format!("     {line}\n"));
         }
     }
+    out.push('\n');
 
-    let _ = err.write_line("");
+    let req_out = INSPECT_BUF
+        .lock()
+        .ok()
+        .and_then(|mut buf| buf.remove(&id))
+        .unwrap_or_default();
+
+    let err = Term::stderr();
+    let _ = err.write_str(&format!("{req_out}{out}"));
 }
 
 pub fn info(msg: &str) {

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use flate2::read::GzDecoder;
 use futures::AsyncWriteExt;
 use futures::future::poll_fn;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -244,10 +245,18 @@ async fn proxy_to_local(
         });
 
         let resp_head = proxy::read_http_head(&mut local).await.unwrap_or_default();
-        let status = proxy::parse_response_status(&resp_head);
         let resp_head_end = proxy::headers_end(&resp_head).unwrap_or(resp_head.len());
         let resp_headers = &resp_head[..resp_head_end];
         let resp_already = resp_head[resp_head_end..].to_vec();
+        let status = proxy::parse_response_status(resp_headers);
+
+        if status == 101 {
+            tunnel.write_all(&resp_head).await?;
+            tunnel.flush().await.ok();
+            tlog::request(&method, &path, status, start.elapsed().as_millis() as u64, id);
+            tokio::io::copy_bidirectional(&mut local, &mut tunnel).await.ok();
+            return Ok(());
+        }
 
         let resp_cl = proxy::parse_content_length(resp_headers);
         let resp_body = if resp_cl > 0 {
@@ -276,7 +285,7 @@ async fn proxy_to_local(
         tlog::inspect_request(id, &req_raw, &req_body_str);
 
         let resp_raw = String::from_utf8_lossy(&out_headers);
-        let resp_body_str = String::from_utf8_lossy(&resp_body);
+        let resp_body_str = body_for_display(&out_headers, &resp_body);
         tlog::inspect_response(status, &resp_raw, &resp_body_str, id);
     } else {
         local.write_all(req_headers).await?;
@@ -377,6 +386,50 @@ async fn read_chunked<R: tokio::io::AsyncRead + Unpin>(
         }
     }
     body
+}
+
+fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut d = GzDecoder::new(data);
+    let mut out = Vec::new();
+    d.read_to_end(&mut out).ok()?;
+    Some(out)
+}
+
+fn is_binary_content_type(headers: &str) -> bool {
+    for line in headers.lines() {
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with("content-type:") {
+            let val = &lower[13..];
+            return val.contains("image/")
+                || val.contains("audio/")
+                || val.contains("video/")
+                || val.contains("font/")
+                || val.contains("application/octet-stream")
+                || val.contains("application/pdf")
+                || val.contains("application/wasm")
+                || val.contains("application/javascript")
+                || val.contains("text/javascript")
+                || val.contains("text/css");
+        }
+    }
+    false
+}
+
+fn body_for_display(headers: &[u8], body: &[u8]) -> String {
+    let headers_str = String::from_utf8_lossy(headers);
+    if is_binary_content_type(&headers_str) {
+        return format!("[binary {} bytes]", body.len());
+    }
+    let is_gzip = headers_str
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with("content-encoding:") && l.contains("gzip"));
+    if is_gzip {
+        if let Some(decoded) = decompress_gzip(body) {
+            return String::from_utf8_lossy(&decoded).into_owned();
+        }
+    }
+    String::from_utf8_lossy(body).into_owned()
 }
 
 fn rebuild_resp_headers(headers: &[u8], body_len: usize) -> Vec<u8> {

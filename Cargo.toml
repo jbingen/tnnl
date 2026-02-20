@@ -1,6 +1,6 @@
 [package]
 name = "tnnl-cli"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Expose localhost to the internet. Self-hosted ngrok alternative."
 license = "MIT"
@@ -34,6 +34,7 @@ toml = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+flate2 = "1"
 
 [profile.release]
 strip = true
