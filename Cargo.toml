@@ -1,5 +1,5 @@
 [package]
-name = "tnnl"
+name = "tnnl-cli"
 version = "0.3.0"
 edition = "2024"
 description = "Expose localhost to the internet. Self-hosted ngrok alternative."
@@ -8,6 +8,14 @@ repository = "https://github.com/jbingen/tnnl"
 homepage = "https://tnnl.run"
 keywords = ["tunnel", "ngrok", "localhost", "webhook", "proxy"]
 categories = ["network-programming", "command-line-utilities"]
+
+[lib]
+name = "tnnl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tnnl"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
