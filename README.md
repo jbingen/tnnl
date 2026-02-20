@@ -40,7 +40,7 @@ Every request gets logged:
 curl -fsSL https://tnnl.run/install.sh | sh
 ```
 
-**From releases**: grab a prebuilt binary from the [releases page](https://github.com/soria-dev/tnnl/releases).
+**From releases**: grab a prebuilt binary from the [releases page](https://github.com/jbingen/tnnl/releases).
 
 **From source** (requires Rust):
 

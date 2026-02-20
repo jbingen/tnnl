@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="soria-dev/tnnl"
+REPO="jbingen/tnnl"
 INSTALL_DIR="/usr/local/bin"
 BINARY="tnnl"
 

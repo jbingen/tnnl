@@ -259,6 +259,8 @@ async fn handle_client(
     Ok(())
 }
 
+const INSTALL_SH: &str = include_str!("../install.sh");
+
 async fn handle_http(
     mut socket: tokio::net::TcpStream,
     registry: Registry,
@@ -266,6 +268,22 @@ async fn handle_http(
 ) -> Result<()> {
     let head = proxy::read_http_head(&mut socket).await?;
     let host = proxy::extract_host(&head).context("no Host header")?;
+
+    if host == domain {
+        let (_, path) = proxy::parse_request_line(&head);
+        let response: Vec<u8> = if path == "/install.sh" {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                INSTALL_SH.len(),
+                INSTALL_SH
+            )
+            .into_bytes()
+        } else {
+            b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://github.com/jbingen/tnnl\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
+        };
+        tokio::io::AsyncWriteExt::write_all(&mut socket, &response).await.ok();
+        return Ok(());
+    }
 
     let subdomain = host
         .strip_suffix(&format!(".{domain}"))
