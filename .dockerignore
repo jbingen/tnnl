@@ -1,5 +1,2 @@
 target/
 .git/
-*.gif
-demo.tape
-demo-setup.sh
