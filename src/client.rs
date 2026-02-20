@@ -13,6 +13,7 @@ use crate::log as tlog;
 use crate::protocol::{self, ControlMsg};
 use crate::proxy;
 use crate::store;
+use crate::update;
 
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
@@ -140,6 +141,7 @@ async fn connect_and_tunnel(opts: &TunnelOpts<'_>, expected_auth: Option<&str>) 
         format!("https://{tunnel_url}")
     };
     tlog::banner(&display_url, local_host, *local_port, *inspect);
+    update::check_in_background();
 
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(async move {

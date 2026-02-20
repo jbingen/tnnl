@@ -339,3 +339,12 @@ pub fn success(msg: &str) {
         style(msg).green()
     ));
 }
+
+pub fn update_available(version: &str) {
+    let err = Term::stderr();
+    let _ = err.write_line(&format!(
+        "{}  {}  v{version} available  curl -fsSL https://tnnl.run/install.sh | sh",
+        style(elapsed()).dim(),
+        style("update").yellow().bold(),
+    ));
+}
