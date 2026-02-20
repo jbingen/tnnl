@@ -34,6 +34,12 @@ curl -fsSL https://tnnl.run/install.sh | sh
 
 **Prebuilt binary**: [releases page](https://github.com/jbingen/tnnl/releases)
 
+**Via cargo**:
+
+```sh
+cargo install tnnl-cli
+```
+
 **From source**:
 
 ```sh
