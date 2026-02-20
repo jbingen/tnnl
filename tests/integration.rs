@@ -53,6 +53,7 @@ async fn tunnel_proxies_request_end_to_end() {
     tokio::spawn(tnnl::client::run(
         backend_port,
         "127.0.0.1",
+        "127.0.0.1",
         control_port,
         SECRET,
         Some("testapp"),
@@ -93,6 +94,7 @@ async fn tunnel_rejects_wrong_secret() {
     tokio::spawn(tnnl::client::run(
         backend_port,
         "127.0.0.1",
+        "127.0.0.1",
         control_port,
         "wrong-secret",
         Some("badapp"),
@@ -127,6 +129,7 @@ async fn tunnel_works_with_no_secret() {
     // Client with no secret either.
     tokio::spawn(tnnl::client::run(
         backend_port,
+        "127.0.0.1",
         "127.0.0.1",
         control_port,
         "",
@@ -175,6 +178,7 @@ async fn tunnel_returns_502_when_backend_down() {
 
     tokio::spawn(tnnl::client::run(
         dead_port,
+        "127.0.0.1",
         "127.0.0.1",
         control_port,
         SECRET,

@@ -12,8 +12,8 @@ The public server at [tnnl.run](https://tnnl.run) is free to use:
 
 ```sh
 curl -fsSL https://tnnl.run/install.sh | sh
-tnnl http 3000 --to tnnl.run
-# → abc12345.tnnl.run is live
+tnnl http 3000
+# → https://abc12345.tnnl.run is live
 ```
 
 Every request is logged as it comes in:
@@ -174,7 +174,7 @@ server {
 
 | Flag             | Default       | Description                                       |
 | ---------------- | ------------- | ------------------------------------------------- |
-| `--to`           | `127.0.0.1`   | Server address                                    |
+| `--to`           | `tnnl.run`    | Server address                                    |
 | `--token`        | config / none | Shared secret for authentication                  |
 | `--subdomain`    | random        | Request a specific subdomain                      |
 | `--auth`         | none          | Protect tunnel with HTTP basic auth (`user:pass`) |

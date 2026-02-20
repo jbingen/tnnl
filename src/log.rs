@@ -55,10 +55,7 @@ fn extract_content_type(headers: &str) -> &str {
     ""
 }
 
-// ── JSON colorizer ────────────────────────────────────────────────────────────
-
 fn find_key_colon(s: &str) -> Option<usize> {
-    // s starts with '"'; scan for the closing quote then expect ':'
     let b = s.as_bytes();
     let mut i = 1;
     while i < b.len() {
@@ -90,15 +87,13 @@ fn colorize_json_line(line: &str) -> String {
     let indent = &line[..indent_len];
     let trimmed = line.trim_start();
 
-    // Pure structural lines
     if matches!(trimmed, "{" | "}" | "}," | "[" | "]" | "],") {
         return format!("{indent}{}", style(trimmed).dim());
     }
 
-    // Key-value pair
     if trimmed.starts_with('"') {
         if let Some(colon_pos) = find_key_colon(trimmed) {
-            let key_part = &trimmed[..colon_pos]; // e.g. `"type"`
+            let key_part = &trimmed[..colon_pos];
             let after = trimmed[colon_pos + 1..].trim_start();
             let (value_part, comma) = after
                 .strip_suffix(',')
@@ -111,7 +106,6 @@ fn colorize_json_line(line: &str) -> String {
         }
     }
 
-    // Array element or bare value
     let (value_part, comma) = trimmed
         .strip_suffix(',')
         .map(|v| (v, ","))
@@ -160,21 +154,17 @@ fn format_body(raw_headers: &str, body: &str, id: u64) -> String {
     }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-pub fn banner(url: &str, local_port: u16, inspect: bool) {
+pub fn banner(url: &str, local_host: &str, local_port: u16, inspect: bool) {
     use console::measure_text_width;
 
     let version = env!("CARGO_PKG_VERSION");
     let ver = format!("v{version}");
     let err = Term::stderr();
 
-    // Build styled strings up front so measure_text_width can do the right thing.
     let url_row = format!("{}  {}", style("➜").green(), style(url).green().bold());
-    let local_row = format!("{}", style(format!("↳  localhost:{local_port}")).dim());
+    let local_row = format!("{}", style(format!("↳  {local_host}:{local_port}")).dim());
     let inspect_row = format!("{}", style("inspect mode").cyan());
 
-    // Inner width = max content visible width + 4 (2 leading + 2 trailing), min 40.
     let mut inner_w = 40usize;
     inner_w = inner_w.max(measure_text_width(&url_row) + 4);
     inner_w = inner_w.max(measure_text_width(&local_row) + 4);
@@ -185,15 +175,13 @@ pub fn banner(url: &str, local_port: u16, inspect: bool) {
     let border = "─".repeat(inner_w);
     let empty = format!("│{}│", " ".repeat(inner_w));
 
-    // Pad any styled string to fill inner_w (2 leading + content + pad + 2 trailing).
     let row = |s: &str| -> String {
         let vis = measure_text_width(s);
         let pad = inner_w.saturating_sub(vis + 4);
         format!("│  {s}{}  │", " ".repeat(pad))
     };
 
-    // Title row: "tnnl" left, version right-justified.
-    let title_pad = inner_w.saturating_sub(4 + ver.len() + 4); // 4="tnnl", 4=margins
+    let title_pad = inner_w.saturating_sub(4 + ver.len() + 4);
     let title_row = format!(
         "│  {}{}{}  │",
         style("tnnl").bold(),

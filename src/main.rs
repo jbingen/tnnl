@@ -54,6 +54,10 @@ enum Command {
         #[arg(long)]
         control_port: Option<u16>,
 
+        /// Local host to proxy to (default: 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        local_host: String,
+
         /// Protect the tunnel with HTTP basic auth (format: user:pass)
         #[arg(long)]
         auth: Option<String>,
@@ -89,19 +93,20 @@ async fn main() -> anyhow::Result<()> {
             token,
             subdomain,
             control_port,
+            local_host,
             auth,
             inspect,
         } => {
             let cfg = config::load();
 
-            let server_addr = server.or(cfg.server).unwrap_or_else(|| "127.0.0.1".to_string());
+            let server_addr = server.or(cfg.server).unwrap_or_else(|| "tnnl.run".to_string());
             let token = token.or(cfg.token).unwrap_or_default();
             let ctrl_port = control_port.or(cfg.control_port).unwrap_or(DEFAULT_CONTROL_PORT);
             let sub = subdomain.or(cfg.subdomain);
             let basic_auth = auth.or(cfg.auth);
             let do_inspect = inspect || cfg.inspect.unwrap_or(false);
 
-            client::run(port, &server_addr, ctrl_port, &token, sub.as_deref(), basic_auth.as_deref(), do_inspect).await?;
+            client::run(port, &local_host, &server_addr, ctrl_port, &token, sub.as_deref(), basic_auth.as_deref(), do_inspect).await?;
         }
         Command::Replay { id } => {
             client::replay(id).await?;

@@ -10,17 +10,14 @@ pub struct StoredRequest {
     pub port: u16,
     pub method: String,
     pub path: String,
-    /// Everything up to and including the trailing \r\n\r\n.
     pub raw_headers: String,
-    /// Request body, base64-encoded to preserve binary payloads.
     pub body_b64: String,
 }
 
 fn store_path() -> std::path::PathBuf {
-    std::path::PathBuf::from("/tmp/tnnl-requests.jsonl")
+    std::env::temp_dir().join("tnnl-requests.jsonl")
 }
 
-/// Initialize the counter so IDs are globally unique across restarts.
 pub fn init() {
     let max = read_all()
         .into_iter()

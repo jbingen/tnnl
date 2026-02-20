@@ -20,6 +20,7 @@ const BODY_CAP: usize = 10 * 1024 * 1024; // 10 MB inspect cap
 
 pub async fn run(
     local_port: u16,
+    local_host: &str,
     server_addr: &str,
     server_port: u16,
     token: &str,
@@ -28,14 +29,14 @@ pub async fn run(
     inspect: bool,
 ) -> Result<()> {
     store::init();
-    // Precompute "Basic <b64>" once so we're not doing it per-request.
     let expected_auth = auth.map(|a| format!("Basic {}", B64.encode(a)));
     let mut backoff = INITIAL_BACKOFF;
 
     loop {
         tlog::info(&format!("connecting to {server_addr}:{server_port}..."));
 
-        match connect_and_tunnel(local_port, server_addr, server_port, token, subdomain, expected_auth.as_deref(), inspect).await
+        let attempt_start = std::time::Instant::now();
+        match connect_and_tunnel(local_port, local_host, server_addr, server_port, token, subdomain, expected_auth.as_deref(), inspect).await
         {
             Ok(()) => {
                 tlog::info("connection closed");
@@ -45,7 +46,12 @@ pub async fn run(
                 tlog::error(&format!("{e:#}"));
                 tlog::info(&format!("reconnecting in {}s...", backoff.as_secs()));
                 tokio::time::sleep(backoff).await;
-                backoff = (backoff * 2).min(MAX_BACKOFF);
+                // If we were connected long enough to show the banner, reset backoff.
+                if attempt_start.elapsed() > Duration::from_secs(5) {
+                    backoff = INITIAL_BACKOFF;
+                } else {
+                    backoff = (backoff * 2).min(MAX_BACKOFF);
+                }
             }
         }
     }
@@ -55,6 +61,7 @@ pub async fn run(
 
 async fn connect_and_tunnel(
     local_port: u16,
+    local_host: &str,
     server_addr: &str,
     server_port: u16,
     token: &str,
@@ -62,9 +69,13 @@ async fn connect_and_tunnel(
     expected_auth: Option<&str>,
     inspect: bool,
 ) -> Result<()> {
-    let socket = TcpStream::connect(format!("{server_addr}:{server_port}"))
-        .await
-        .context("failed to connect to server")?;
+    let socket = tokio::time::timeout(
+        Duration::from_secs(10),
+        TcpStream::connect(format!("{server_addr}:{server_port}")),
+    )
+    .await
+    .context("connection timed out")?
+    .context("failed to connect to server")?;
 
     let mut config = Config::default();
     config.set_split_send_size(16 * 1024);
@@ -118,7 +129,12 @@ async fn connect_and_tunnel(
         _ => anyhow::bail!("unexpected response from server"),
     };
 
-    tlog::banner(&tunnel_url, local_port, inspect);
+    let display_url = if server_addr == "127.0.0.1" || server_addr == "localhost" {
+        format!("http://{tunnel_url}")
+    } else {
+        format!("https://{tunnel_url}")
+    };
+    tlog::banner(&display_url, local_host, local_port, inspect);
 
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(async move {
@@ -137,7 +153,7 @@ async fn connect_and_tunnel(
             }
             stream = inbound_rx.recv() => {
                 match stream {
-                    Some(s) => { tokio::spawn(handle_stream(s, local_port, expected_auth.map(|s| s.to_string()), inspect)); }
+                    Some(s) => { tokio::spawn(handle_stream(s, local_port, local_host.to_string(), expected_auth.map(|s| s.to_string()), inspect)); }
                     None => break,
                 }
             }
@@ -147,15 +163,16 @@ async fn connect_and_tunnel(
     Ok(())
 }
 
-async fn handle_stream(stream: yamux::Stream, local_port: u16, expected_auth: Option<String>, inspect: bool) {
-    if let Err(e) = proxy_to_localhost(stream, local_port, expected_auth.as_deref(), inspect).await {
+async fn handle_stream(stream: yamux::Stream, local_port: u16, local_host: String, expected_auth: Option<String>, inspect: bool) {
+    if let Err(e) = proxy_to_local(stream, local_port, &local_host, expected_auth.as_deref(), inspect).await {
         tlog::error(&format!("proxy: {e}"));
     }
 }
 
-async fn proxy_to_localhost(
+async fn proxy_to_local(
     stream: yamux::Stream,
     local_port: u16,
+    local_host: &str,
     expected_auth: Option<&str>,
     inspect: bool,
 ) -> Result<()> {
@@ -180,7 +197,7 @@ async fn proxy_to_localhost(
         }
     }
 
-    let mut local = match TcpStream::connect(format!("127.0.0.1:{local_port}")).await {
+    let mut local = match TcpStream::connect(format!("{local_host}:{local_port}")).await {
         Ok(s) => s,
         Err(_) => {
             proxy::write_502(&mut tunnel).await.ok();
@@ -190,7 +207,6 @@ async fn proxy_to_localhost(
     };
 
     if inspect {
-        // Inspect path: buffer full request body before forwarding so we can display it.
         let req_body = read_body_exact(&mut tunnel, body_prefix, content_length).await;
 
         local.write_all(req_headers).await?;
@@ -206,7 +222,6 @@ async fn proxy_to_localhost(
             body_b64: B64.encode(&req_body),
         });
 
-        // Read and buffer complete response.
         let resp_head = proxy::read_http_head(&mut local).await.unwrap_or_default();
         let status = proxy::parse_response_status(&resp_head);
         let resp_head_end = proxy::headers_end(&resp_head).unwrap_or(resp_head.len());
@@ -222,7 +237,6 @@ async fn proxy_to_localhost(
             resp_already
         };
 
-        // Unchunk the response so the forwarded bytes are valid HTTP.
         let out_headers = if proxy::is_chunked(resp_headers) {
             rebuild_resp_headers(resp_headers, resp_body.len())
         } else {
@@ -244,8 +258,6 @@ async fn proxy_to_localhost(
         let resp_body_str = String::from_utf8_lossy(&resp_body);
         tlog::inspect_response(status, &resp_raw, &resp_body_str, id);
     } else {
-        // Transparent path: forward headers + already-buffered prefix immediately,
-        // then stream the rest bidirectionally. Body is never fully buffered.
         local.write_all(req_headers).await?;
         local.write_all(&body_prefix).await?;
         local.flush().await?;
@@ -261,7 +273,6 @@ async fn proxy_to_localhost(
             body_b64: B64.encode(&body_prefix),
         });
 
-        // Peek first response chunk for status, then stream the rest.
         let mut peek = [0u8; 512];
         let n = local.read(&mut peek).await.unwrap_or(0);
         let status = proxy::parse_response_status(&peek[..n]);
@@ -273,7 +284,6 @@ async fn proxy_to_localhost(
     Ok(())
 }
 
-/// Loop-read until we have `total` bytes or EOF, capped at BODY_CAP.
 async fn read_body_exact<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut R,
     mut buf: Vec<u8>,
@@ -291,7 +301,6 @@ async fn read_body_exact<R: tokio::io::AsyncRead + Unpin>(
     buf
 }
 
-/// Decode an HTTP chunked body into raw bytes.
 async fn read_chunked<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut R,
     initial: Vec<u8>,
@@ -315,14 +324,10 @@ async fn read_chunked<R: tokio::io::AsyncRead + Unpin>(
                 .trim();
             let chunk_size = usize::from_str_radix(size_str, 16).unwrap_or(0);
             if chunk_size == 0 {
-                // Terminal chunk: "0\r\n\r\n". We've already consumed the first
-                // \r\n (the size line ending). We need one more \r\n to follow.
-                // Only exit if that trailing \r\n is also present in the buffer.
                 let after_size_line = pos + crlf + 2;
                 if after_size_line + 2 <= raw.len() {
                     break 'outer;
                 }
-                // Not enough data yet — fall through to read more.
                 break;
             }
             let data_start = pos + crlf + 2;
@@ -345,7 +350,6 @@ async fn read_chunked<R: tokio::io::AsyncRead + Unpin>(
     body
 }
 
-/// Strip Transfer-Encoding and insert Content-Length so the unchunked body is valid.
 fn rebuild_resp_headers(headers: &[u8], body_len: usize) -> Vec<u8> {
     let text = String::from_utf8_lossy(headers);
     let mut out = Vec::new();
@@ -396,8 +400,11 @@ pub async fn replay(id: u64) -> Result<()> {
         resp_already
     };
 
-    println!("{}", String::from_utf8_lossy(&resp_body));
-
-    tlog::success(&format!("replayed #{id}"));
+    let body_str = String::from_utf8_lossy(&resp_body);
+    let status = proxy::parse_response_status(&resp_head);
+    tlog::success(&format!("replayed #{id} → {status}"));
+    if !body_str.trim().is_empty() {
+        eprintln!("{body_str}");
+    }
     Ok(())
 }
