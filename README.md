@@ -4,8 +4,6 @@
 
 ![demo](https://vhs.charm.sh/vhs-7x43LFVT4jrZOnRC8oNBJn.gif)
 
----
-
 ## Quickstart
 
 The public server at [tnnl.run](https://tnnl.run) is free to use:
