@@ -1853,9 +1853,9 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "yamux"
-version = "0.13.8"
+version = "0.13.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deab71f2e20691b4728b349c6cee8fc7223880fa67b6b4f92225ec32225447e5"
+checksum = "1991f6690292030e31b0144d73f5e8368936c58e45e7068254f7138b23b00672"
 dependencies = [
  "futures",
  "log",
